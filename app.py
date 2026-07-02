@@ -195,6 +195,37 @@ with col2:
         default=["Média móvel simples", "Suavização exponencial", "Regressão linear"],
     )
 
+# --- Configurações avançadas: parâmetros que o PDF do professor menciona
+# como ajustáveis (alfa da suavização exponencial e janela da média móvel) ---
+with st.expander("⚙️ Configurações avançadas (opcional)"):
+    col3, col4 = st.columns(2)
+    with col3:
+        janela_media_movel = st.slider(
+            "Janela da média móvel (quantas semanas usar na média)",
+            min_value=2, max_value=6, value=3,
+            help="Janelas menores reagem mais rápido a mudanças recentes. "
+                 "Janelas maiores suavizam mais, mas atrasam a resposta."
+        )
+    with col4:
+        alfa_suavizacao = st.slider(
+            "Alfa da suavização exponencial",
+            min_value=0.1, max_value=0.9, value=0.4, step=0.1,
+            help="Alfa alto = a previsão reage rápido a mudanças recentes. "
+                 "Alfa baixo = a previsão fica mais estável, reage devagar."
+        )
+
+# --- Explicação rápida de cada método, para consulta durante a apresentação ---
+with st.expander("📘 O que cada método faz (para consulta rápida)"):
+    st.markdown("""
+| Método | Quando usar | Fórmula resumida |
+|---|---|---|
+| **Ingênuo** | Referência básica de comparação | Próxima semana = última semana conhecida |
+| **Média móvel simples** | Demanda relativamente estável | Média das últimas N semanas |
+| **Média móvel ponderada** | Quando dados recentes importam mais | Média com pesos maiores nas semanas recentes |
+| **Suavização exponencial** | Demanda com variação moderada | F(t+1) = alfa × D(t) + (1-alfa) × F(t) |
+| **Regressão linear** | Demanda com tendência clara de subida/queda | Ajusta uma reta sobre o histórico |
+""")
+
 # --- Validação da entrada ---
 def validar_e_converter(texto):
     """Converte o texto digitado em uma lista de números, com validação de erros comuns."""
@@ -240,16 +271,16 @@ if st.button("Calcular previsão", type="primary"):
             erros_mae["Ingênuo"] = calcular_mae(serie, previsao_ingenua)
 
         if "Média móvel simples" in metodos_selecionados:
-            resultados["Média móvel simples"] = previsao_media_movel_simples(serie, n_futuras)
-            erros_mae["Média móvel simples"] = calcular_mae(serie, previsao_media_movel_simples)
+            resultados["Média móvel simples"] = previsao_media_movel_simples(serie, n_futuras, janela=janela_media_movel)
+            erros_mae["Média móvel simples"] = calcular_mae(serie, previsao_media_movel_simples, janela=janela_media_movel)
 
         if "Média móvel ponderada" in metodos_selecionados:
-            resultados["Média móvel ponderada"] = previsao_media_movel_ponderada(serie, n_futuras)
-            erros_mae["Média móvel ponderada"] = calcular_mae(serie, previsao_media_movel_ponderada)
+            resultados["Média móvel ponderada"] = previsao_media_movel_ponderada(serie, n_futuras, janela=janela_media_movel)
+            erros_mae["Média móvel ponderada"] = calcular_mae(serie, previsao_media_movel_ponderada, janela=janela_media_movel)
 
         if "Suavização exponencial" in metodos_selecionados:
-            resultados["Suavização exponencial"] = previsao_suavizacao_exponencial(serie, n_futuras)
-            erros_mae["Suavização exponencial"] = calcular_mae(serie, previsao_suavizacao_exponencial)
+            resultados["Suavização exponencial"] = previsao_suavizacao_exponencial(serie, n_futuras, alfa=alfa_suavizacao)
+            erros_mae["Suavização exponencial"] = calcular_mae(serie, previsao_suavizacao_exponencial, alfa=alfa_suavizacao)
 
         if "Regressão linear" in metodos_selecionados:
             prev_reg, inclinacao = previsao_regressao_linear(serie, n_futuras)
@@ -264,6 +295,13 @@ if st.button("Calcular previsão", type="primary"):
             df_previsao[nome_metodo] = [round(v, 1) for v in valores]
         st.dataframe(df_previsao, use_container_width=True, hide_index=True)
 
+        st.download_button(
+            label="⬇️ Baixar previsão em CSV",
+            data=df_previsao.to_csv(index=False).encode("utf-8"),
+            file_name=f"previsao_{nome_produto.replace(' ', '_')}.csv",
+            mime="text/csv",
+        )
+
         # --- Seção 4: gráfico ---
         st.header("4. Gráfico: histórico x previsão")
         fig = go.Figure()
@@ -277,9 +315,10 @@ if st.button("Calcular previsão", type="primary"):
                 mode="lines+markers", name=nome_metodo, line=dict(dash="dash")
             ))
         fig.update_layout(
+            title=f"Demanda de {nome_produto}: histórico e previsão",
             xaxis_title="Semana", yaxis_title="Demanda",
             legend=dict(orientation="h", yanchor="bottom", y=-0.3),
-            margin=dict(l=10, r=10, t=30, b=10),
+            margin=dict(l=10, r=10, t=40, b=10),
         )
         st.plotly_chart(fig, use_container_width=True)
 
